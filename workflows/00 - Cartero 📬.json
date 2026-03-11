@@ -1,0 +1,123 @@
+{
+  "name": "00 - Cartero 📬",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "-from:procesar.facturas@gmail.com has:attachment"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -432,
+        0
+      ],
+      "id": "1c47577d-e6a3-4a7f-b169-821cdd78eba4",
+      "name": "Recepción de Correo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const nuevosItems = [];\n\n// Revisamos todos los correos que entraron\nfor (const item of $input.all()) {\n  // Verificamos si el correo trae archivos binarios (adjuntos)\n  if (item.binary) {\n    // Recorremos cada archivo (attachment_0, attachment_1, etc.)\n    for (const nombreBolsillo of Object.keys(item.binary)) {\n      nuevosItems.push({\n        json: item.json, // Mantenemos los datos del correo (para sacar el remitente)\n        binary: {\n          data: item.binary[nombreBolsillo] // Bautizamos a todos los archivos como 'data'\n        }\n      });\n    }\n  }\n}\n\nreturn nuevosItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        0
+      ],
+      "id": "66a981d9-12c3-476e-acde-4638eb3246ec",
+      "name": "Separador de Adjuntos"
+    },
+    {
+      "parameters": {
+        "name": "={{ $binary.data.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "19O1cUjg47oXTOtPmED57-tkErme0qpHG",
+          "mode": "list",
+          "cachedResultName": "Inbox de Facturas",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/19O1cUjg47oXTOtPmED57-tkErme0qpHG"
+        },
+        "options": {
+          "propertiesUi": {
+            "propertyValues": [
+              {
+                "key": "correo_origen",
+                "value": "={{ $json.from.value[0].address }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        16,
+        0
+      ],
+      "id": "5f6562a2-3370-4fa3-8a4b-23267a01a91b",
+      "name": "Entrega a Inbox",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Recepción de Correo": {
+      "main": [
+        [
+          {
+            "node": "Separador de Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separador de Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Entrega a Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "807b41be-7e72-442a-93bf-8a30db404a9b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a1d55af76ad586715ff5817da8ec5dfc5326b8a329b2f50baa15e34196516ec5"
+  },
+  "id": "Axrit1USVTBXb4Av",
+  "tags": []
+}

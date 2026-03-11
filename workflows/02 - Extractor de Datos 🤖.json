@@ -1,0 +1,560 @@
+{
+  "name": "02 - Extractor de Datos 🤖",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        -144
+      ],
+      "id": "9bfb96aa-676e-4d6e-b5b9-f2ba6ca05037",
+      "name": "Trigger Documento a procesar"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.file_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -992,
+        -144
+      ],
+      "id": "5bfdb6c0-7a6c-4b2c-a930-11507105dc79",
+      "name": "Descargar Documento",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.extencion }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "8dc38b77-f62f-43ba-b0b3-e53266f04f95"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "23016250-b458-4bad-beea-336386575db8",
+                    "leftValue": "={{ $json.extencion }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -768,
+        -144
+      ],
+      "id": "2de19700-b43f-47c2-a0d9-cfa59ac266fc",
+      "name": "Catalogador archivo"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "=Eres un auditor experto en facturación chilena. Extrae la información LITERAL de la factura adjunta y devuélvela en el formato JSON estricto proporcionado.\n\nREGLAS DE EXTRACCIÓN CRÍTICAS:\n\n1. CABECERA:\n- Solo extrae el \"nombre_proveedor\" comercial impreso. Ignora fechas, RUT y folios (esos datos ya fueron extraídos).\n\n2. CÓDIGOS Y DESCRIPCIÓN:\n- Si el producto tiene un código impreso, extráelo. Si NO TIENE código, devuelve estrictamente null.\n- Une las descripciones si ocupan más de una línea de texto en el documento.\n\n3. CANTIDADES Y FORMATOS (UNIDADES/CAJAS/KG):\n- Extrae números decimales si aplican (ej. \"1.5\" para kilos).\n- CASO SEPARADOR (ej. \"8/00\" o \"8 / 0\"): El formato representa Cajas/Unidades. Extrae el número de la IZQUIERDA a \"cantidad_cajas\" y el de la DERECHA a \"cantidad_unidades\" (si es 00 o 0, extrae 0).\n- Si hay columnas separadas explícitas de cajas y unidades, extráelas directamente.\n- Si dice explícitamente \"CJ\", \"UN\", \"KG\", \"Display\", guárdalo en \"unidad_compra\".\n\n4. PRECIOS (UNITARIO VS TOTAL LÍNEA):\n- \"precio_base_unitario\": Precio por UNA unidad/caja, ANTES de impuestos o descuentos.\n- \"precio_total_neto_linea\": Valor total de la línea (Cantidad x Precio Unitario), ANTES de agregar IVA o ILA.\n\n5. DESCUENTOS POR LÍNEA:\n- Extrae el número puro a \"porcentaje\", \"monto_unitario\", o \"monto_total\". Usa null si no aplica.\n\n6. IMPUESTOS ADICIONALES (ILA / OTROS) - ¡EXCLUYE EL IVA!:\n- REGLA DE ORO: NUNCA incluyas el 19% de IVA en esta sección. Esto es SOLO para impuestos específicos (ILA, IABA, Ley de Carnes).\n- Si la línea tiene una columna explícita con % o monto de impuesto ILA, úsalo SIEMPRE. \n- SOLO si no hay impuesto explícito, infiérelo al campo \"porcentaje_ila_inferido\" usando ESTRICTAMENTE esta tabla:\n  * 31.5 para licores, piscos, whisky, aguardientes, destilados y VINOS LICOROSOS.\n  * 20.5 para CERVEZAS CON ALCOHOL, vinos comunes, chichas y sidras. (¡PROHIBIDO usar esto en Cervezas Cero o Sin Alcohol!).\n  * 18 para bebidas analcohólicas con ALTO contenido de azúcar.\n  * 10 para CERVEZAS SIN ALCOHOL (Cerveza Cero / 0.0) y bebidas analcohólicas SIN alto contenido de azúcar.\n  * 0 para aguas, jugos, leches, carnes, quesos y sólidos en general.\n\n7. FLETES Y DESPACHOS:\n- Busca \"Flete\", \"Despacho\", \"Logística\" o transporte.\n- CASO A (Columna por producto): Extrae el monto en \"monto_flete_total_impreso\".\n- CASO B (Línea como producto): Extráelo en \"lineas_detalle\" y marca \"es_flete_linea\" como true.\n- CASO C (Resumen final general): Ponlo en \"fletes_globales\".\n\n8. FORMATO ESTRICTO DE NÚMEROS:\n- Extrae TODOS los valores monetarios y cantidades como NÚMEROS (no strings).\n- En Chile no hay centavos. Elimina TODO punto de miles (ej. \"12.500\" -> 12500).\n- Usa el punto (.) SOLO como separador decimal para porcentajes y kilos (ej. 20.5).\n\n9. COMPLETITUD ABSOLUTA (EVITAR TRUNCAMIENTO):\n- Tienes la OBLIGACIÓN ESTRICTA de extraer TODAS Y CADA UNA de las líneas de productos que aparezcan en la factura. \n- No omitas ningún ítem, sin importar lo larga que sea la lista.\n\nNO HAGAS CÁLCULOS. Devuelve ÚNICAMENTE un objeto JSON válido, sin formato markdown adicional ni bloques de código, usando EXACTAMENTE esta estructura:\n\n{\n  \"cabecera\": {\n    \"nombre_proveedor\": \"\"\n  },\n  \"descuento_global_porcentaje\": null,\n  \"fletes_globales\": [\n    {\n      \"descripcion\": \"\",\n      \"monto_total\": 0\n    }\n  ],\n  \"lineas_detalle\": [\n    {\n      \"codigo_producto\": null,\n      \"descripcion\": \"\",\n      \"cantidad_cajas\": null,\n      \"cantidad_unidades\": null,\n      \"cantidad_total_impresa\": null,\n      \"unidad_compra\": \"\",\n      \"precio_base_unitario\": null,\n      \"precio_total_neto_linea\": null,\n      \"descuentos\": {\n        \"porcentaje\": null,\n        \"monto_unitario\": null,\n        \"monto_total\": null\n      },\n      \"impuestos\": {\n        \"porcentaje_ila_inferido\": null,\n        \"monto_total_impreso\": null\n      },\n      \"monto_flete_total_impreso\": null,\n      \"es_flete_linea\": false\n    }\n  ]\n}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -544,
+        -240
+      ],
+      "id": "5b0987d1-14b0-420d-a728-4f7bd636d70c",
+      "name": "Extractor Datos PDF",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SDXFIvvCipZww5hY",
+          "name": "Gemini Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "=Eres un auditor experto en facturación chilena. Extrae la información LITERAL de la factura adjunta y devuélvela en el formato JSON estricto proporcionado.\n\nREGLAS DE EXTRACCIÓN CRÍTICAS:\n\n1. CABECERA:\n- Solo extrae el \"nombre_proveedor\" comercial impreso. Ignora fechas, RUT y folios (esos datos ya fueron extraídos).\n\n2. CÓDIGOS Y DESCRIPCIÓN:\n- Si el producto tiene un código impreso, extráelo. Si NO TIENE código, devuelve estrictamente null.\n- Une las descripciones si ocupan más de una línea de texto en el documento.\n\n3. CANTIDADES Y FORMATOS (UNIDADES/CAJAS/KG):\n- Extrae números decimales si aplican (ej. \"1.5\" para kilos).\n- CASO SEPARADOR (ej. \"8/00\" o \"8 / 0\"): El formato representa Cajas/Unidades. Extrae el número de la IZQUIERDA a \"cantidad_cajas\" y el de la DERECHA a \"cantidad_unidades\" (si es 00 o 0, extrae 0).\n- Si hay columnas separadas explícitas de cajas y unidades, extráelas directamente.\n- Si dice explícitamente \"CJ\", \"UN\", \"KG\", \"Display\", guárdalo en \"unidad_compra\".\n\n4. PRECIOS (UNITARIO VS TOTAL LÍNEA):\n- \"precio_base_unitario\": Precio por UNA unidad/caja, ANTES de impuestos o descuentos.\n- \"precio_total_neto_linea\": Valor total de la línea (Cantidad x Precio Unitario), ANTES de agregar IVA o ILA.\n\n5. DESCUENTOS POR LÍNEA:\n- Extrae el número puro a \"porcentaje\", \"monto_unitario\", o \"monto_total\". Usa null si no aplica.\n\n6. IMPUESTOS ADICIONALES (ILA / OTROS) - ¡EXCLUYE EL IVA!:\n- REGLA DE ORO: NUNCA incluyas el 19% de IVA en esta sección. Esto es SOLO para impuestos específicos (ILA, IABA, Ley de Carnes).\n- Si la línea tiene una columna explícita con % o monto de impuesto ILA, úsalo SIEMPRE. \n- SOLO si no hay impuesto explícito, infiérelo al campo \"porcentaje_ila_inferido\" usando ESTRICTAMENTE esta tabla:\n  * 31.5 para licores, piscos, whisky, aguardientes, destilados y VINOS LICOROSOS.\n  * 20.5 para CERVEZAS CON ALCOHOL, vinos comunes, chichas y sidras. (¡PROHIBIDO usar esto en Cervezas Cero o Sin Alcohol!).\n  * 18 para bebidas analcohólicas con ALTO contenido de azúcar.\n  * 10 para CERVEZAS SIN ALCOHOL (Cerveza Cero / 0.0) y bebidas analcohólicas SIN alto contenido de azúcar.\n  * 0 para aguas, jugos, leches, carnes, quesos y sólidos en general.\n\n7. FLETES Y DESPACHOS:\n- Busca \"Flete\", \"Despacho\", \"Logística\" o transporte.\n- CASO A (Columna por producto): Extrae el monto en \"monto_flete_total_impreso\".\n- CASO B (Línea como producto): Extráelo en \"lineas_detalle\" y marca \"es_flete_linea\" como true.\n- CASO C (Resumen final general): Ponlo en \"fletes_globales\".\n\n8. FORMATO ESTRICTO DE NÚMEROS:\n- Extrae TODOS los valores monetarios y cantidades como NÚMEROS (no strings).\n- En Chile no hay centavos. Elimina TODO punto de miles (ej. \"12.500\" -> 12500).\n- Usa el punto (.) SOLO como separador decimal para porcentajes y kilos (ej. 20.5).\n\n9. COMPLETITUD ABSOLUTA (EVITAR TRUNCAMIENTO):\n- Tienes la OBLIGACIÓN ESTRICTA de extraer TODAS Y CADA UNA de las líneas de productos que aparezcan en la factura. \n- No omitas ningún ítem, sin importar lo larga que sea la lista.\n\nNO HAGAS CÁLCULOS. Devuelve ÚNICAMENTE un objeto JSON válido, sin formato markdown adicional ni bloques de código, usando EXACTAMENTE esta estructura:\n\n{\n  \"cabecera\": {\n    \"nombre_proveedor\": \"\"\n  },\n  \"descuento_global_porcentaje\": null,\n  \"fletes_globales\": [\n    {\n      \"descripcion\": \"\",\n      \"monto_total\": 0\n    }\n  ],\n  \"lineas_detalle\": [\n    {\n      \"codigo_producto\": null,\n      \"descripcion\": \"\",\n      \"cantidad_cajas\": null,\n      \"cantidad_unidades\": null,\n      \"cantidad_total_impresa\": null,\n      \"unidad_compra\": \"\",\n      \"precio_base_unitario\": null,\n      \"precio_total_neto_linea\": null,\n      \"descuentos\": {\n        \"porcentaje\": null,\n        \"monto_unitario\": null,\n        \"monto_total\": null\n      },\n      \"impuestos\": {\n        \"porcentaje_ila_inferido\": null,\n        \"monto_total_impreso\": null\n      },\n      \"monto_flete_total_impreso\": null,\n      \"es_flete_linea\": false\n    }\n  ]\n}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -544,
+        -48
+      ],
+      "id": "e22bffa3-be4f-46a3-9089-8a9b6da8a2b3",
+      "name": "Extractor Datos imagen",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SDXFIvvCipZww5hY",
+          "name": "Gemini Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "excel_procesado",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        128,
+        -144
+      ],
+      "id": "16b0e6b3-ddd6-4fe7-8c8b-cdc20a268fb4",
+      "name": "Output generado"
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "excel_procesado",
+        "name": "={{ $('Trigger Documento a procesar').item.json.fecha_emision }}_{{ $('Trigger Documento a procesar').item.json.nombre_empresa }}_{{ $('Trigger Documento a procesar').item.json.numero_documento }}_{{ $('Trigger Documento a procesar').item.json.tipo_documento }}.xlxs",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Trigger Documento a procesar').item.json.Output_Drive_Folder_ID.split('/').pop() }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        576,
+        -336
+      ],
+      "id": "91ee7842-a46d-479e-9892-4375234cfa0c",
+      "name": "Cargar a Factura de Output de Cliente",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c6bb759a-e1a9-44d5-9ee8-b676fc9915ec",
+              "leftValue": "={{ $('Trigger Documento a procesar').item.json.correo_origen }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        576,
+        48
+      ],
+      "id": "e73e53e1-6381-4f6e-8004-0b9f9967e500",
+      "name": "Verificar correo_origen"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ==========================================\n// 0. FUNCIONES AUXILIARES (HASHING)\n// ==========================================\nfunction generarCodigoHash(texto) {\n    let hash = 0;\n    let str = (texto || \"SIN_NOMBRE\").toUpperCase().trim();\n    for (let i = 0; i < str.length; i++) {\n        let char = str.charCodeAt(i);\n        hash = ((hash << 5) - hash) + char;\n        hash = hash & hash;\n    }\n    return \"GEN-\" + Math.abs(hash).toString(16).toUpperCase().padStart(7, '0');\n}\n\n// ==========================================\n// 1. CONFIGURACIÓN DEL NODO INICIAL (MOCHILA)\n// ==========================================\nconst mochila = $('Trigger Documento a procesar').first().json || {};\nconst fileId = mochila.file_id || \"\";\nconst rutProveedor = mochila.rut_proveedor || \"\";\nconst numeroDocumento = mochila.numero_documento || \"\";\nconst tipoDocumento = mochila.tipo_documento || \"Factura\";\nconst fechaEmision = mochila.fecha_emision || \"\";\n\n// MAGIA: Ahora el nombre limpio viene directamente desde el WF 01 en la mochila\nconst nombreProveedor = mochila.nombre_empresa || mochila.nombre_proveedor || \"Desconocido\";\n\n// ==========================================\n// 2. RECUPERAR EL JSON DE GEMINI\n// ==========================================\nconst dataExtraida = $('Code (Parsear JSON)').first().json || {};\n\nif (dataExtraida.error_extraccion) {\n    return [{ json: { error: \"Fallo en extracción previa\", detalle: dataExtraida.mensaje_error } }];\n}\n\n// ==========================================\n// 3. TU MOTOR MATEMÁTICO\n// ==========================================\nconst lineasOriginales = dataExtraida.lineas_detalle || [];\nconst fletesGlobalesArray = dataExtraida.fletes_globales || [];\nconst descGlobalPorcentaje = Number(dataExtraida.descuento_global_porcentaje) || 0;\n\nlet pozoFleteGlobal = fletesGlobalesArray.reduce((sum, f) => sum + (Number(f.monto_total) || 0), 0);\nlet lineasProductos = [];\n\nfor (let linea of lineasOriginales) {\n    let esFlete = linea.es_flete_linea === true || String(linea.es_flete_linea).toLowerCase() === \"true\";\n    let descripcionLimpia = (linea.descripcion || \"\").toLowerCase().normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\");\n    let pareceFlete = descripcionLimpia.includes(\"flete\") || descripcionLimpia.includes(\"despacho\") || descripcionLimpia.includes(\"logistica\") || descripcionLimpia.includes(\"logistics\") || descripcionLimpia.includes(\"almacenamiento\") || descripcionLimpia.includes(\"distribucion\");\n\n    if (esFlete || pareceFlete) {\n        let cantFlete = Number(linea.cantidad_total_impresa) || 1;\n        let precioFlete = Number(linea.precio_base_unitario) || Number(linea.monto_total_impreso) || Number(linea.monto_total_neto) || 0;\n        pozoFleteGlobal += (cantFlete * precioFlete);\n    } else {\n        lineasProductos.push(linea);\n    }\n}\n\nlet lineasProcesadas = lineasProductos.map(linea => {\n    let cant = Number(linea.cantidad_total_impresa) || (Number(linea.cantidad_cajas || 0) + Number(linea.cantidad_unidades || 0)) || 1;\n    let precioUnit = Number(linea.precio_base_unitario) || 0;\n    \n    let multiplicador = tipoDocumento.toLowerCase().includes(\"credito\") ? -1 : 1;\n    let totalBrutoLinea = (cant * precioUnit) * multiplicador;\n\n    let descMontoLocal = 0;\n    let desc = linea.descuentos || {};\n    if (desc.monto_total !== null && desc.monto_total !== undefined) {\n        descMontoLocal = Number(desc.monto_total) * multiplicador;\n    } else if (desc.porcentaje !== null && desc.porcentaje !== undefined) {\n        descMontoLocal = totalBrutoLinea * (Number(desc.porcentaje) / 100);\n    } else if (desc.monto_unitario !== null && desc.monto_unitario !== undefined) {\n        descMontoLocal = (cant * Number(desc.monto_unitario)) * multiplicador;\n    }\n\n    let subtotalNetoLinea = totalBrutoLinea - descMontoLocal;\n    let descMontoGlobal = subtotalNetoLinea * (descGlobalPorcentaje / 100);\n    \n    let montoDescuentoTotal = descMontoLocal + descMontoGlobal;\n    let montoTotalNeto = subtotalNetoLinea - descMontoGlobal;\n\n    let montoIla = 0;\n    let imp = linea.impuestos || {};\n    let porcIlaAplicado = 0;\n\n    if (imp.monto_total_impreso !== null && imp.monto_total_impreso !== undefined) {\n        montoIla = Number(imp.monto_total_impreso) * multiplicador;\n        porcIlaAplicado = montoTotalNeto !== 0 ? Math.abs((montoIla / montoTotalNeto) * 100) : 0;\n        \n        if (porcIlaAplicado > 35) {\n            montoIla = 0;\n            porcIlaAplicado = 0;\n        }\n    } else if (imp.porcentaje_ila_inferido !== null && imp.porcentaje_ila_inferido !== undefined) {\n        porcIlaAplicado = Number(imp.porcentaje_ila_inferido);\n        montoIla = montoTotalNeto * (porcIlaAplicado / 100);\n    }\n\n    let fleteImpreso = null;\n    if (linea.monto_flete_total_impreso !== null && linea.monto_flete_total_impreso !== undefined) {\n        fleteImpreso = Number(linea.monto_flete_total_impreso) * multiplicador;\n    }\n\n    return {\n        ...linea,\n        cantidad_calculada: cant * multiplicador,\n        precio_unitario_calculado: precioUnit,\n        monto_descuento_calculado: montoDescuentoTotal,\n        monto_total_neto_calculado: montoTotalNeto,\n        monto_ila_calculado: montoIla,\n        porcentaje_ila_aplicado: porcIlaAplicado,\n        monto_flete_impreso_calculado: fleteImpreso\n    };\n});\n\nconst totalNetoFactura = lineasProcesadas.reduce((sum, linea) => sum + linea.monto_total_neto_calculado, 0);\n\n// ==========================================\n// 4. GENERACIÓN DE MATRIZ CUADRADA PARA EXCEL\n// ==========================================\nlet resultadosAplanados = [];\n\nfor (let linea of lineasProcesadas) {\n    let fleteAsignado = 0;\n    if (linea.monto_flete_impreso_calculado !== null) {\n        fleteAsignado = linea.monto_flete_impreso_calculado; \n    } else {\n        let proporcion = totalNetoFactura !== 0 ? (linea.monto_total_neto_calculado / totalNetoFactura) : 0;\n        fleteAsignado = pozoFleteGlobal * proporcion; \n    }\n\n    let montoIlaRedondeado = Math.round(linea.monto_ila_calculado);\n    let costoTotalLinea = linea.monto_total_neto_calculado + fleteAsignado + montoIlaRedondeado;\n    let baseIva = linea.monto_total_neto_calculado + fleteAsignado;\n    let iva19Linea = baseIva * 0.19;\n    let montoIvaRedondeado = Math.round(iva19Linea);\n    let valorTotalLinea = costoTotalLinea + montoIvaRedondeado;\n    let costoUnidadCompra = linea.cantidad_calculada !== 0 ? (costoTotalLinea / linea.cantidad_calculada) : 0;\n\n    let codProducto = linea.codigo_producto;\n    if (!codProducto || codProducto.toString().trim() === \"\" || codProducto === \"null\") {\n        codProducto = generarCodigoHash(linea.descripcion);\n    }\n\n    resultadosAplanados.push({\n        json: {\n            \"file_id\": fileId,\n            \"rut_proveedor\": rutProveedor,\n            \"nombre_proveedor\": nombreProveedor,\n            \"numero_documento\": numeroDocumento,\n            \"tipo_documento\": tipoDocumento,\n            \"fecha_emision\": fechaEmision,\n            \n            \"codigo_producto\": codProducto,\n            \"descripcion\": linea.descripcion || \"SIN_DESCRIPCION\",\n            \"unidad_compra\": linea.unidad_compra || \"UN\",\n            \"cantidad\": parseFloat(linea.cantidad_calculada.toFixed(2)),\n            \"porcentaje_ila\": parseFloat(Number(linea.porcentaje_ila_aplicado).toFixed(2)),\n            \n            \"precio_base_unitario\": parseFloat(linea.precio_unitario_calculado.toFixed(2)),\n            \"monto_descuento\": parseFloat(linea.monto_descuento_calculado.toFixed(2)),\n            \"monto_total_neto\": parseFloat(linea.monto_total_neto_calculado.toFixed(2)),\n            \"flete_ponderado\": parseFloat(fleteAsignado.toFixed(2)),\n            \"costo_unidad_compra\": parseFloat(costoUnidadCompra.toFixed(2)),\n            \n            \"monto_ila\": montoIlaRedondeado,\n            \"iva_19\": montoIvaRedondeado,\n            \"costo_total_linea\": Math.round(costoTotalLinea),\n            \"valor_total_linea\": Math.round(valorTotalLinea),\n            \"correo_origen\": mochila.correo_origen || \"\" \n        }\n    });\n}\n\nreturn resultadosAplanados.length > 0 ? resultadosAplanados : [{ json: { error: \"No se encontraron productos\" } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -144
+      ],
+      "id": "08422ea9-e29d-49d8-91b5-791b9c494970",
+      "name": "Code (Motor Matemático y Aplanado)"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (let item of $input.all()) {\n  // 1. Datos para renombrar el Excel\n  const mochila = $('Trigger Documento a procesar').first().json;\n  const nombreProv = $('Code (Motor Matemático y Aplanado)').first().json.nombre_proveedor;\n\n  const nombrePerfecto = `${mochila.fecha_emision}_${nombreProv}_${mochila.numero_documento}_${mochila.tipo_documento}.xlsx`;\n\n  // Asegurarnos de que el bolsillo de binarios exista\n  if (!item.binary) item.binary = {};\n\n  // 2. Renombrar el Excel (si existe)\n  if (item.binary.excel_procesado) {\n    item.binary.excel_procesado.fileName = nombrePerfecto;\n  }\n\n  // 3. EL RESCATE DE LA IMAGEN ORIGINAL\n  // Vamos a buscar el binario 'data' directo del nodo que descargó el archivo al inicio\n  const imagenOriginal = $('Descargar Documento').first().binary?.data;\n  \n  if (imagenOriginal) {\n    // Lo guardamos en el bolsillo 'data' actual para que Gmail lo encuentre\n    item.binary.data = imagenOriginal;\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        -144
+      ],
+      "id": "dcb3f63b-f943-4653-8a4d-7d49d06c3343",
+      "name": "Code (Renombrador)"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Trigger Documento a procesar').item.json.correo_origen }}",
+        "subject": "=[BOT-FACTURAS] Procesada: {{ $('Trigger Documento a procesar').item.json.nombre_empresa }} | N° {{ $('Trigger Documento a procesar').item.json.numero_documento }}",
+        "message": "¡Hola! Adjunto el archivo Excel procesado.",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {},
+              {
+                "property": "excel_procesado"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        32
+      ],
+      "id": "8d2fbc8d-453c-4b13-b35f-46a2909e25df",
+      "name": "Correo Output Origen",
+      "webhookId": "44f7a562-b4fc-427c-961e-bcf73d9b5727",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YvMn2JDtRSAw0Ncb",
+          "name": "Correo Facturas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "procesar.facturas@gmail.com",
+        "subject": "=[BOT-FACTURAS] Procesada: {{ $('Trigger Documento a procesar').item.json.nombre_empresa }} | N° {{ $('Trigger Documento a procesar').item.json.numero_documento }}",
+        "message": "¡Hola! Adjunto el archivo Excel procesado.",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {},
+              {
+                "property": "excel_procesado"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        -144
+      ],
+      "id": "d42f9d8e-9562-47af-bc67-69759b5deab2",
+      "name": "Correo Output respaldo",
+      "webhookId": "44f7a562-b4fc-427c-961e-bcf73d9b5727",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YvMn2JDtRSAw0Ncb",
+          "name": "Correo Facturas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let resultados = [];\n\nfor (let item of $input.all()) {\n    try {\n        let rawText = item.json?.content?.parts?.[0]?.text;\n        if (!rawText) throw new Error(\"No se encontró texto de Gemini.\");\n        \n        let cleanText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();\n        let inicio = cleanText.indexOf('{');\n        let fin = cleanText.lastIndexOf('}');\n        \n        if(inicio !== -1 && fin !== -1) {\n            cleanText = cleanText.substring(inicio, fin + 1);\n        }\n        resultados.push({ json: JSON.parse(cleanText) });\n    } catch (error) {\n        resultados.push({ json: { error_extraccion: true, mensaje_error: error.message } });\n    }\n}\nreturn resultados;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        -144
+      ],
+      "id": "ba5fe963-f15a-4ff2-b95f-617822585626",
+      "name": "Code (Parsear JSON)"
+    },
+    {
+      "parameters": {
+        "content": "## Recepción de Inbox Catalogador",
+        "height": 288,
+        "width": 624,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        -240
+      ],
+      "id": "fac905ce-96d1-4c5a-8003-fd334dd58343",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Extracción de datos",
+        "height": 448,
+        "width": 656,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -608,
+        -320
+      ],
+      "id": "234d02e3-bc2d-4d88-a2fb-68e4e82f12e3",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Generación de Output",
+        "height": 272,
+        "width": 400,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        80,
+        -240
+      ],
+      "id": "ca2a371d-49c0-426d-9259-fa3f43cd0650",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Archivado y envío de output ",
+        "height": 784,
+        "width": 512,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        496,
+        -496
+      ],
+      "id": "a56ab156-9ed3-4d66-9c6e-3c3a03257931",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Trigger Documento a procesar": {
+      "main": [
+        [
+          {
+            "node": "Descargar Documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Documento": {
+      "main": [
+        [
+          {
+            "node": "Catalogador archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Catalogador archivo": {
+      "main": [
+        [
+          {
+            "node": "Extractor Datos PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extractor Datos imagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extractor Datos PDF": {
+      "main": [
+        [
+          {
+            "node": "Code (Parsear JSON)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extractor Datos imagen": {
+      "main": [
+        [
+          {
+            "node": "Code (Parsear JSON)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output generado": {
+      "main": [
+        [
+          {
+            "node": "Code (Renombrador)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar a Factura de Output de Cliente": {
+      "main": [
+        []
+      ]
+    },
+    "Verificar correo_origen": {
+      "main": [
+        [
+          {
+            "node": "Correo Output Origen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (Motor Matemático y Aplanado)": {
+      "main": [
+        [
+          {
+            "node": "Output generado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (Renombrador)": {
+      "main": [
+        [
+          {
+            "node": "Cargar a Factura de Output de Cliente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Verificar correo_origen",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Correo Output respaldo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (Parsear JSON)": {
+      "main": [
+        [
+          {
+            "node": "Code (Motor Matemático y Aplanado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9545da22-3b0e-4e09-b1ea-5c9fb47a0992",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a1d55af76ad586715ff5817da8ec5dfc5326b8a329b2f50baa15e34196516ec5"
+  },
+  "id": "mOk2DDMYR0wSU8On",
+  "tags": []
+}

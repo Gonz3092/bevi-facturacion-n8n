@@ -1,0 +1,26 @@
+# Entornos locales y credenciales (¡Seguridad vital!)
+.env
+.env.*
+credentials/
+
+# Dependencias (por si en el futuro agregas scripts de Node.js)
+node_modules/
+
+# Basura del sistema operativo (Mac y Windows)
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs de errores
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp

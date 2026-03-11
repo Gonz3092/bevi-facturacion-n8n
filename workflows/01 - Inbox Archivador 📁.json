@@ -1,0 +1,914 @@
+{
+  "name": "01 - Inbox Archivador 📁",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2784,
+        -1248
+      ],
+      "id": "60285b38-c1cd-4421-9a46-3bc8cc5aba71",
+      "name": "Descargar Factura Original",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mimeType }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "8dc38b77-f62f-43ba-b0b3-e53266f04f95"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "23016250-b458-4bad-beea-336386575db8",
+                    "leftValue": "={{ $json.mimeType }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -2528,
+        -1248
+      ],
+      "id": "a6f59a35-9221-4fcd-be4a-b2ef1f51ce80",
+      "name": "Catalogador archivo"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "=Eres un asistente experto en clasificación de documentos tributarios chilenos. \n\nAnaliza la imagen o PDF adjunto y devuelve ÚNICAMENTE un objeto JSON válido con la siguiente estructura, sin formato markdown adicional ni bloques de código.\n\nREGLAS DE EXTRACCIÓN CRÍTICAS:\n\n1. \"rut_proveedor\": DATO CRÍTICO. RUT del emisor del documento. Ubicado siempre en el recuadro de la parte superior DERECHA. Formatea SIEMPRE como \"XX.XXX.XXX-X\" (incluye puntos y guion, el verificador puede ser K).\n\n2. \"nombre_empresa\": Nombre fiscal o razón social del emisor. Generalmente ubicado en la parte central superior o superior izquierda.\n\n3. \"tipo_documento\": Identificador legal del documento. Ubicado en el recuadro superior derecho.\n\n4. \"numero_documento\": Número de folio o serial. Devuelve SIEMPRE este valor como una CADENA DE TEXTO (string) entre comillas, NUNCA como numérico.\n\n5. \"fecha_documento\": Fecha de emisión. Formato estricto \"YYYY-MM-DD\".\n\nFORMATO DE SALIDA ESTRICTO:\n\n{\n  \"rut_proveedor\": \"\",\n  \"nombre_empresa\": \"\",\n  \"tipo_documento\": \"\",\n  \"numero_documento\": \"\",\n  \"fecha_documento\": \"\"\n}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -2336,
+        -1360
+      ],
+      "id": "2c0ac524-bf99-4549-8e4e-d7fa2e28c7cb",
+      "name": "Extractor Datos Enrutamiento PDF",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SDXFIvvCipZww5hY",
+          "name": "Gemini Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// === FUNCIÓN MÁGICA NORMALIZADORA DE RUT ===\nfunction limpiarYFormatearRUT(rutMalo) {\n    if (!rutMalo || rutMalo === \"null\") return \"\";\n    let rutString = String(rutMalo).trim();\n    if (rutString === \"\") return \"\";\n    let limpio = rutString.replace(/[^0-9kK]/g, '').toUpperCase();\n    if (limpio.length < 2) return rutString; \n    let dv = limpio.slice(-1);\n    let cuerpo = limpio.slice(0, -1);\n    cuerpo = cuerpo.replace(/\\B(?=(\\d{3})+(?!\\d))/g, \".\");\n    return cuerpo + \"-\" + dv;\n}\n// ===========================================\n\nlet resultados = [];\n\nfor (let item of $input.all()) {\n  try {\n    let rawText = item.json?.content?.parts?.[0]?.text;\n    if (!rawText) throw new Error(\"Sin texto de Gemini\");\n    \n    let cleanText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();\n    let inicio = cleanText.indexOf('{');\n    let fin = cleanText.lastIndexOf('}');\n    if(inicio !== -1 && fin !== -1) cleanText = cleanText.substring(inicio, fin + 1);\n    \n    let parsedData = JSON.parse(cleanText);\n    \n    // 1. Limpieza Forzada del RUT Proveedor\n    parsedData.rut_proveedor = limpiarYFormatearRUT(parsedData.rut_proveedor);\n    \n    // 2. Rescate del Correo (Directo del Trigger)\n    parsedData.correo_origen = $('Inbox Facturas').first()?.json?.properties?.correo_origen || \"\";\n    \n    resultados.push({ json: parsedData });\n    \n  } catch (error) {\n    resultados.push({ json: { \"error_enrutamiento\": true, \"rut_proveedor\": \"ERROR\", \"detalle\": error.message } });\n  }\n}\n\nreturn resultados;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2144,
+        -1248
+      ],
+      "id": "ebe82091-c5d4-4347-b8fa-ccfb6f24f6be",
+      "name": "Datos Enrutamiento"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "19O1cUjg47oXTOtPmED57-tkErme0qpHG",
+          "mode": "list",
+          "cachedResultName": "Inbox de Facturas",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/19O1cUjg47oXTOtPmED57-tkErme0qpHG"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3200,
+        -1264
+      ],
+      "id": "7dba174f-ea2c-4473-87ef-4b8026638bd8",
+      "name": "Inbox Facturas",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# Recepción de Documento\n",
+        "height": 304,
+        "width": 672
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -3232,
+        -1360
+      ],
+      "typeVersion": 1,
+      "id": "e9df71a1-f716-49bf-94f9-3bc84eaf065e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# Verificación por carpeta\n\n\n\n",
+        "height": 320,
+        "width": 608,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1904,
+        -1456
+      ],
+      "typeVersion": 1,
+      "id": "c4577eb4-4edf-441b-8fd5-840af7fc412f",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# Carpeta de enrutamiento creada\n\n\n",
+        "height": 272,
+        "width": 624,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1568,
+        -1184
+      ],
+      "typeVersion": 1,
+      "id": "057db3e9-10f4-4eb8-a394-50ba7b20a65a",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# Envío a Extractor de datos",
+        "height": 320,
+        "width": 464,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -624,
+        -1120
+      ],
+      "typeVersion": 1,
+      "id": "39097e72-c78b-416c-a662-c6bbec2dbcaf",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Inbox Facturas').item.json.id }}",
+          "mode": "id"
+        },
+        "newUpdatedFileName": "={{ $('Datos Enrutamiento').item.json.fecha_documento }}_{{ $('Datos Enrutamiento').item.json.nombre_empresa }}_{{ $('Datos Enrutamiento').item.json.numero_documento }}_{{ $('Datos Enrutamiento').item.json.tipo_documento }}.{{ $('Controlador de Tráfico').item.json.fileExtension }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -896,
+        -1328
+      ],
+      "id": "b3333429-8c91-4407-b7f6-ddc46dbd5157",
+      "name": "Renombrar Archivo",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# Catalogador de Documento",
+        "height": 448,
+        "width": 576,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2544,
+        -1456
+      ],
+      "typeVersion": 1,
+      "id": "c8fe2ef7-f2b0-42a6-a116-f3cc140c032e",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "mOk2DDMYR0wSU8On",
+          "cachedResultName": "Procesador de Facturas — 3 - Extractor de Datos 🤖"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -336,
+        -992
+      ],
+      "id": "129fc484-5609-4e29-bd2a-819a291d66aa",
+      "name": "Inicio Workflow Extractor de datos"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3ed05f66-0ab6-4193-9a77-344c25df6968",
+              "name": "file_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "903ecbfc-37d2-4a79-a977-6841ddc924f8",
+              "name": "nombre_empresa",
+              "value": "={{ $('Datos Enrutamiento').item.json.nombre_empresa }}",
+              "type": "string"
+            },
+            {
+              "id": "7082fad0-80a8-494e-b894-2d1bd4cd60fc",
+              "name": "rut_proveedor",
+              "value": "={{ $('Datos Enrutamiento').item.json.rut_proveedor }}",
+              "type": "string"
+            },
+            {
+              "id": "2673f209-1ed0-48ed-84da-df229faecdf2",
+              "name": "numero_documento",
+              "value": "={{ $('Datos Enrutamiento').item.json.numero_documento }}",
+              "type": "string"
+            },
+            {
+              "id": "5ec59433-4236-483f-8f37-08b8490b8a91",
+              "name": "fecha_emision",
+              "value": "={{ $('Datos Enrutamiento').item.json.fecha_documento }}",
+              "type": "string"
+            },
+            {
+              "id": "3ce6b5c6-7a7c-40e8-bef2-d39080a49973",
+              "name": "tipo_documento",
+              "value": "={{ $('Datos Enrutamiento').item.json.tipo_documento }}",
+              "type": "string"
+            },
+            {
+              "id": "e119534c-da53-4463-88d0-8b5d0b1ba4a3",
+              "name": "extencion",
+              "value": "={{ $('Controlador de Tráfico').item.json.mimeType }}",
+              "type": "string"
+            },
+            {
+              "id": "8022669a-6668-464c-9667-203c0fe53ddd",
+              "name": "Output_Drive_Folder_ID",
+              "value": "={{ $if($('Carpeta Existente').isExecuted, $('Carpeta Existente').first().json.Carpeta_Destino, $('Carpeta Nueva').first().json.Carpeta_Destino) }}",
+              "type": "string"
+            },
+            {
+              "id": "cea6ae6b-a0ae-4daa-bd23-9481e4654336",
+              "name": "correo_origen",
+              "value": "={{ $('Descargar Factura Original').item.json.properties.correo_origen }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -576,
+        -992
+      ],
+      "id": "28335093-0b3c-4851-842e-8522d4d296b3",
+      "name": "Mapeo de Datos Iniciales"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2992,
+        -1264
+      ],
+      "id": "473bc955-fa3e-46d1-8b7f-c6b073a55ad1",
+      "name": "Controlador de Tráfico"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "=Eres un asistente experto en clasificación de documentos tributarios chilenos. \n\nAnaliza la imagen o PDF adjunto y devuelve ÚNICAMENTE un objeto JSON válido con la siguiente estructura, sin formato markdown adicional ni bloques de código.\n\nREGLAS DE EXTRACCIÓN CRÍTICAS:\n\n1. \"rut_proveedor\": DATO CRÍTICO. RUT del emisor del documento. Ubicado siempre en el recuadro de la parte superior DERECHA. Formatea SIEMPRE como \"XX.XXX.XXX-X\" (incluye puntos y guion, el verificador puede ser K).\n\n2. \"nombre_empresa\": Nombre fiscal o razón social del emisor. Generalmente ubicado en la parte central superior o superior izquierda.\n\n3. \"tipo_documento\": Identificador legal del documento. Ubicado en el recuadro superior derecho.\n\n4. \"numero_documento\": Número de folio o serial. Devuelve SIEMPRE este valor como una CADENA DE TEXTO (string) entre comillas, NUNCA como numérico.\n\n5. \"fecha_documento\": Fecha de emisión. Formato estricto \"YYYY-MM-DD\".\n\nFORMATO DE SALIDA ESTRICTO:\n\n{\n  \"rut_proveedor\": \"\",\n  \"nombre_empresa\": \"\",\n  \"tipo_documento\": \"\",\n  \"numero_documento\": \"\",\n  \"fecha_documento\": \"\"\n}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -2336,
+        -1168
+      ],
+      "id": "0b58577a-0944-4c86-a324-c916110f0ce7",
+      "name": "Extractor Datos Enrutamiento imagen",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "SDXFIvvCipZww5hY",
+          "name": "Gemini Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1KQ_4bYvqIN7aEKKggEMYETm3LMskNPclDLpEYQO1E60",
+          "mode": "list",
+          "cachedResultName": "Directorios_Facturas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1KQ_4bYvqIN7aEKKggEMYETm3LMskNPclDLpEYQO1E60/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 274803302,
+          "mode": "list",
+          "cachedResultName": "directorio_proveedores",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1KQ_4bYvqIN7aEKKggEMYETm3LMskNPclDLpEYQO1E60/edit#gid=274803302"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Rut_proveedor",
+              "lookupValue": "={{ $json.rut_proveedor }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1856,
+        -1344
+      ],
+      "id": "e9fb3699-214e-4cfd-ad26-451412b618d6",
+      "name": "Busqueda Catalogo Proveedor",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "mD5nbQkhayIQueIj",
+          "name": "Sheets gonzalbertogb"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e0a1324d-cb31-491e-a5ba-33a892cac4bc",
+              "leftValue": "={{ $json.Folder_ID }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1664,
+        -1344
+      ],
+      "id": "c2f7a16c-486a-4357-af83-74f139ea0701",
+      "name": "¿Existe Proveedor?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "eed898c5-4cc0-4205-bb5c-a3a3349917df",
+              "name": "Carpeta_Destino",
+              "value": "={{ $json.Folder_ID.split('/').pop().split('?')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1472,
+        -1344
+      ],
+      "id": "ecdf1230-ff0a-4548-80ed-dab17ae725b1",
+      "name": "Carpeta Existente"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e901d1f3-3a17-40f9-8ac3-236c001ba959",
+              "name": "Carpeta_Destino",
+              "value": "={{ $('Nueva Carpeta de Proveedor').item.json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1136,
+        -1088
+      ],
+      "id": "92ff85d5-a00c-4c06-a5f6-eab81e4ea10f",
+      "name": "Carpeta Nueva"
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $('Datos Enrutamiento').item.json.rut_proveedor }} - {{ $('Datos Enrutamiento').item.json.nombre_empresa }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1uAeAdWoOAzPlbwZO7NFjRr1uJF5O0Vqo",
+          "mode": "list",
+          "cachedResultName": "Carpetas de Proveedores",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1uAeAdWoOAzPlbwZO7NFjRr1uJF5O0Vqo"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1488,
+        -1088
+      ],
+      "id": "92751cb2-04b1-4535-8d54-d1a2d461f62e",
+      "name": "Nueva Carpeta de Proveedor",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1KQ_4bYvqIN7aEKKggEMYETm3LMskNPclDLpEYQO1E60",
+          "mode": "list",
+          "cachedResultName": "Directorios_Facturas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1KQ_4bYvqIN7aEKKggEMYETm3LMskNPclDLpEYQO1E60/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 274803302,
+          "mode": "list",
+          "cachedResultName": "directorio_proveedores",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1KQ_4bYvqIN7aEKKggEMYETm3LMskNPclDLpEYQO1E60/edit#gid=274803302"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Folder_ID": "=https://drive.google.com/drive/u/0/folders/{{ $json.id }}",
+            "Rut_proveedor": "={{ $('Datos Enrutamiento').item.json.rut_proveedor }}",
+            "Nombre_Comercial": "={{ $('Datos Enrutamiento').item.json.nombre_empresa }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Rut_proveedor",
+              "displayName": "Rut_proveedor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nombre_Comercial",
+              "displayName": "Nombre_Comercial",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Folder_ID",
+              "displayName": "Folder_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1312,
+        -1088
+      ],
+      "id": "989b97c0-c188-4a27-b165-fa0db1bdc387",
+      "name": "Agregar datos a directorio",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "mD5nbQkhayIQueIj",
+          "name": "Sheets gonzalbertogb"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Controlador de Tráfico').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $if($('Carpeta Existente').isExecuted, $('Carpeta Existente').first().json.Carpeta_Destino, $('Carpeta Nueva').first().json.Carpeta_Destino) }}",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -736,
+        -1328
+      ],
+      "id": "18fd1286-490b-4f73-a818-1b0b4fbcb4cd",
+      "name": "Mover a Carpeta Proveedor",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KLhdA1G7F34AEc5q",
+          "name": "Drive Gonzalberto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Archivado",
+        "height": 272,
+        "width": 352,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -944,
+        -1408
+      ],
+      "id": "954a65b2-c022-42eb-a1b0-6cfaaabb3771",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Descargar Factura Original": {
+      "main": [
+        [
+          {
+            "node": "Catalogador archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Catalogador archivo": {
+      "main": [
+        [
+          {
+            "node": "Extractor Datos Enrutamiento PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extractor Datos Enrutamiento imagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extractor Datos Enrutamiento PDF": {
+      "main": [
+        [
+          {
+            "node": "Datos Enrutamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos Enrutamiento": {
+      "main": [
+        [
+          {
+            "node": "Busqueda Catalogo Proveedor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inbox Facturas": {
+      "main": [
+        [
+          {
+            "node": "Controlador de Tráfico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Renombrar Archivo": {
+      "main": [
+        [
+          {
+            "node": "Mover a Carpeta Proveedor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inicio Workflow Extractor de datos": {
+      "main": [
+        [
+          {
+            "node": "Controlador de Tráfico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mapeo de Datos Iniciales": {
+      "main": [
+        [
+          {
+            "node": "Inicio Workflow Extractor de datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Controlador de Tráfico": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Descargar Factura Original",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extractor Datos Enrutamiento imagen": {
+      "main": [
+        [
+          {
+            "node": "Datos Enrutamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Busqueda Catalogo Proveedor": {
+      "main": [
+        [
+          {
+            "node": "¿Existe Proveedor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Existe Proveedor?": {
+      "main": [
+        [
+          {
+            "node": "Carpeta Existente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nueva Carpeta de Proveedor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carpeta Existente": {
+      "main": [
+        [
+          {
+            "node": "Renombrar Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carpeta Nueva": {
+      "main": [
+        [
+          {
+            "node": "Renombrar Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nueva Carpeta de Proveedor": {
+      "main": [
+        [
+          {
+            "node": "Agregar datos a directorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agregar datos a directorio": {
+      "main": [
+        [
+          {
+            "node": "Carpeta Nueva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mover a Carpeta Proveedor": {
+      "main": [
+        [
+          {
+            "node": "Mapeo de Datos Iniciales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "dbc133bc-8124-4820-9e1b-4b3b37df7357",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a1d55af76ad586715ff5817da8ec5dfc5326b8a329b2f50baa15e34196516ec5"
+  },
+  "id": "yK7Z0Ew8Rz3UOUvw",
+  "tags": []
+}

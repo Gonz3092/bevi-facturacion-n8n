@@ -1,4 +1,5 @@
 # 🤖 BEVi: Sistema Automatizado de Procesamiento Tributario con n8n e IA
+![Diagrama de Arquitectura de BEVi](docs/diagrama-arquitectura.png)
 
 ## 📖 El Origen del Proyecto
 Si bien la arquitectura de este sistema nace tras analizar las ineficiencias crónicas en la cadena de suministro del **sector gastronómico**, **BEVi** fue desarrollado originalmente como una **solución a medida para un cliente específico** del rubro. 

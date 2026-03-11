@@ -4,7 +4,6 @@
 
 ```mermaid
 ---
----
 config:
   layout: fixed
   look: classic
@@ -57,7 +56,7 @@ flowchart LR
     style Q fill:#d93025,stroke:#b31412,color:#fff
     style E fill:#8e24aa,stroke:#6a1b9a,color:#fff
     style M fill:#8e24aa,stroke:#6a1b9a,color:#fff
-
+    
     %% Nodos claros con texto NEGRO (Drive, Sheets, n8n, JS)
     style B fill:#f5f5f5,stroke:#bdbdbd,color:#000
     style C fill:#cce0ff,stroke:#1a73e8,color:#000
@@ -70,6 +69,7 @@ flowchart LR
     style N fill:#f5f5f5,stroke:#bdbdbd,color:#000
     style O fill:#f5f5f5,stroke:#bdbdbd,color:#000
     style P fill:#cce0ff,stroke:#1a73e8,color:#000
+```
 
 ## 📖 El Origen del Proyecto
 Si bien la arquitectura de este sistema nace tras analizar las ineficiencias crónicas en la cadena de suministro del **sector gastronómico**, **BEVi** fue desarrollado originalmente como una **solución a medida para un cliente específico** del rubro. 

@@ -49,17 +49,25 @@ flowchart LR
     N --> O
     O --> P & Q
 
-    style A fill:#f2cbcb,stroke:#d93025
+    %% --- BLOQUE DE ESTILOS CORREGIDO ---
+    %% Nodos con fondo oscuro/intenso -> Texto blanco (color:#fff)
+    style A fill:#d93025,stroke:#b31412,color:#fff
+    style Q fill:#d93025,stroke:#b31412,color:#fff
+    style E fill:#8e24aa,stroke:#6a1b9a,color:#fff
+    style M fill:#8e24aa,stroke:#6a1b9a,color:#fff
+    
+    %% Nodos con fondo claro -> Texto negro por defecto (solo definir fill/stroke)
     style C fill:#cce0ff,stroke:#1a73e8
-    style E fill:#e8d1ff,stroke:#8e24aa
     style F fill:#ceead6,stroke:#188038
     style H fill:#cce0ff,stroke:#1a73e8
     style I fill:#cce0ff,stroke:#1a73e8
     style J fill:#ceead6,stroke:#188038
     style K fill:#cce0ff,stroke:#1a73e8
-    style M fill:#e8d1ff,stroke:#8e24aa
     style P fill:#cce0ff,stroke:#1a73e8
-    style Q fill:#f2cbcb,stroke:#d93025
+    style B fill:#f5f5f5,stroke:#bdbdbd
+    style D fill:#f5f5f5,stroke:#bdbdbd
+    style N fill:#f5f5f5,stroke:#bdbdbd
+    style O fill:#f5f5f5,stroke:#bdbdbd
 ```
 
 ## 📖 El Origen del Proyecto

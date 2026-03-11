@@ -1,6 +1,68 @@
 # 🤖 BEVi: Sistema Automatizado de Procesamiento Tributario con n8n e IA
 ![Diagrama de Arquitectura de BEVi](docs/diagrama-arquitectura.png)
 
+### 🗺️ Diagrama de Arquitectura de BEVi
+
+```mermaid
+---
+config:
+  layout: fixed
+  look: classic
+---
+flowchart LR
+ subgraph Fase1["Fase 1: Ingesta (Cartero)"]
+        B("⚙️ n8n: Separar Adjuntos")
+        A["📧 Trigger: Llega Correo con Factura"]
+        C[("📂 Drive: Guardar en Inbox temporal")]
+  end
+ subgraph Fase2["Fase 2: Enrutamiento (Archivador)"]
+        D["⚙️ Trigger: Nuevo Archivo en Inbox"]
+        E{"🧠 Gemini 2.5 Pro: Extraer RUT"}
+        F[("📊 Sheets: Consultar Directorio")]
+        G{"¿Proveedor Existe?"}
+        H["📂 Drive: Mover a Carpeta Existente"]
+        I["📂 Drive: Crear Nueva Carpeta"]
+        J[("📊 Sheets: Actualizar Directorio")]
+        K["📂 Drive: Mover a Nueva Carpeta"]
+        L(("Activar Fase 3"))
+  end
+ subgraph Fase3["Fase 3: Motor Matemático y Output"]
+        M{"🧠 Gemini 2.5 Pro: Extraer Líneas de Factura"}
+        N("⚙️ JS: Motor Matemático - Fletes e ILA")
+        O("📊 Generar Excel Limpio")
+        P[("📂 Drive: Guardar Excel del Proveedor")]
+        Q["📧 Gmail: Enviar Excel al Remitente"]
+  end
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G -- Sí --> H
+    G -- No --> I
+    I --> J
+    J --> K
+    H --> L
+    K --> L
+    L --> M
+    M --> N
+    N --> O
+    O --> P & Q
+
+    style A fill:#f2cbcb,stroke:#d93025
+    style C fill:#cce0ff,stroke:#1a73e8
+    style E fill:#e8d1ff,stroke:#8e24aa
+    style F fill:#ceead6,stroke:#188038
+    style H fill:#cce0ff,stroke:#1a73e8
+    style I fill:#cce0ff,stroke:#1a73e8
+    style J fill:#ceead6,stroke:#188038
+    style K fill:#cce0ff,stroke:#1a73e8
+    style M fill:#e8d1ff,stroke:#8e24aa
+    style P fill:#cce0ff,stroke:#1a73e8
+    style Q fill:#f2cbcb,stroke:#d93025
+```
+
 ## 📖 El Origen del Proyecto
 Si bien la arquitectura de este sistema nace tras analizar las ineficiencias crónicas en la cadena de suministro del **sector gastronómico**, **BEVi** fue desarrollado originalmente como una **solución a medida para un cliente específico** del rubro. 
 

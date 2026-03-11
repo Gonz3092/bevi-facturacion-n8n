@@ -4,6 +4,7 @@
 
 ```mermaid
 ---
+---
 config:
   layout: fixed
   look: classic
@@ -50,25 +51,25 @@ flowchart LR
     O --> P & Q
 
     %% --- BLOQUE DE ESTILOS CORREGIDO ---
-    %% Nodos con fondo oscuro/intenso -> Texto blanco (color:#fff)
+    
+    %% Nodos oscuros con texto BLANCO (Gmail y Gemini)
     style A fill:#d93025,stroke:#b31412,color:#fff
     style Q fill:#d93025,stroke:#b31412,color:#fff
     style E fill:#8e24aa,stroke:#6a1b9a,color:#fff
     style M fill:#8e24aa,stroke:#6a1b9a,color:#fff
-    
-    %% Nodos con fondo claro -> Texto negro por defecto (solo definir fill/stroke)
-    style C fill:#cce0ff,stroke:#1a73e8
-    style F fill:#ceead6,stroke:#188038
-    style H fill:#cce0ff,stroke:#1a73e8
-    style I fill:#cce0ff,stroke:#1a73e8
-    style J fill:#ceead6,stroke:#188038
-    style K fill:#cce0ff,stroke:#1a73e8
-    style P fill:#cce0ff,stroke:#1a73e8
-    style B fill:#f5f5f5,stroke:#bdbdbd
-    style D fill:#f5f5f5,stroke:#bdbdbd
-    style N fill:#f5f5f5,stroke:#bdbdbd
-    style O fill:#f5f5f5,stroke:#bdbdbd
-```
+
+    %% Nodos claros con texto NEGRO (Drive, Sheets, n8n, JS)
+    style B fill:#f5f5f5,stroke:#bdbdbd,color:#000
+    style C fill:#cce0ff,stroke:#1a73e8,color:#000
+    style D fill:#f5f5f5,stroke:#bdbdbd,color:#000
+    style F fill:#ceead6,stroke:#188038,color:#000
+    style H fill:#cce0ff,stroke:#1a73e8,color:#000
+    style I fill:#cce0ff,stroke:#1a73e8,color:#000
+    style J fill:#ceead6,stroke:#188038,color:#000
+    style K fill:#cce0ff,stroke:#1a73e8,color:#000
+    style N fill:#f5f5f5,stroke:#bdbdbd,color:#000
+    style O fill:#f5f5f5,stroke:#bdbdbd,color:#000
+    style P fill:#cce0ff,stroke:#1a73e8,color:#000
 
 ## 📖 El Origen del Proyecto
 Si bien la arquitectura de este sistema nace tras analizar las ineficiencias crónicas en la cadena de suministro del **sector gastronómico**, **BEVi** fue desarrollado originalmente como una **solución a medida para un cliente específico** del rubro. 

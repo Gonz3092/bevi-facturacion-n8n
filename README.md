@@ -1,5 +1,4 @@
 # 🤖 BEVi: Sistema Automatizado de Procesamiento Tributario con n8n e IA
-![Diagrama de Arquitectura de BEVi](docs/diagrama-arquitectura.png)
 
 ### 🗺️ Diagrama de Arquitectura de BEVi
 
